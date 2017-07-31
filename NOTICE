@@ -1,0 +1,15 @@
+Prometheus exporter for Minio metrics
+Copyright 2017 Giuseppe Pellegrino
+
+The following components are included in this product:
+
+prometheus
+https://github.com/prometheus/client_golang/prometheus
+Copyright 2015 The Prometheus Authors
+Licensed under the Apache-2.0 License
+
+minio
+https://github.com/minio/minio-go
+https://github.com/minio/minio/pkg/madmin
+Copyright 2015-2017 Minio Cloud Storage, Minio, Inc.
+Licensed under the Apache-2.0 License
