@@ -1,3 +1,16 @@
+// Copyright 2017 Giuseppe Pellegrino
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -125,7 +138,7 @@ func execute(e *MinioExporter, ch chan<- prometheus.Metric) error {
 	// Collect server admin statistics
 	collectServerStats(e, ch)
 	if e.BucketStats {
-		collectBucketStats(e, ch)
+		collectBucketsStats(e, ch)
 	}
 	return nil
 }
@@ -134,78 +147,79 @@ func collectServerStats(e *MinioExporter, ch chan<- prometheus.Metric) {
 	statsAll, _ := e.AdminClient.ServerInfo()
 
 	for _, stats := range statsAll {
+		host := stats.Addr
 		connStats := stats.Data.ConnStats
 		ch <- prometheus.MustNewConstMetric(
 			prometheus.NewDesc(
 				prometheus.BuildFQName(namespace, "conn", "total_input_bytes"),
 				"Minio total input bytes received",
-				nil,
+				[]string{"minio_host"},
 				nil),
 			prometheus.GaugeValue,
-			float64(connStats.TotalInputBytes))
+			float64(connStats.TotalInputBytes), host)
 		ch <- prometheus.MustNewConstMetric(
 			prometheus.NewDesc(
 				prometheus.BuildFQName(namespace, "conn", "total_output_bytes"),
 				"Minio total output bytes received",
-				nil,
+				[]string{"minio_host"},
 				nil),
 			prometheus.GaugeValue,
-			float64(connStats.TotalOutputBytes))
+			float64(connStats.TotalOutputBytes), host)
 
-		collectStorageInfo(stats.Data.StorageInfo, ch)
+		collectStorageInfo(stats.Data.StorageInfo, host, ch)
 	}
 
 }
 
-func collectStorageInfo(si madmin.StorageInfo, ch chan<- prometheus.Metric) {
+func collectStorageInfo(si madmin.StorageInfo, host string, ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "total_disk_space"),
 			"Total Minio disk space in bytes",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Total))
+		float64(si.Total), host)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "free_disk_space"),
 			"Free Minio disk space in bytes",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Free))
+		float64(si.Free), host)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "online_disks"),
 			"Total number of Minio online disks",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OnlineDisks))
+		float64(si.Backend.OnlineDisks), host)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "offline_disks"),
 			"Total number of Minio offline disks",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OfflineDisks))
+		float64(si.Backend.OfflineDisks), host)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "read_quorum"),
 			"Minio read quorum",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.ReadQuorum))
+		float64(si.Backend.ReadQuorum), host)
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "write_quorum"),
 			"Minio write quorum",
-			nil,
+			[]string{"minio_host"},
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.WriteQuorum))
+		float64(si.Backend.WriteQuorum), host)
 
 	var fstype string
 	switch fstypeN := si.Backend.Type; fstypeN {
@@ -224,7 +238,8 @@ func collectStorageInfo(si madmin.StorageInfo, ch chan<- prometheus.Metric) {
 		float64(si.Backend.Type), fstype)
 }
 
-func collectBucketStats(e *MinioExporter, ch chan<- prometheus.Metric) {
+// Collect all buckets stats per bucket. Each bucket stats runs in a go routine.
+func collectBucketsStats(e *MinioExporter, ch chan<- prometheus.Metric) {
 	buckets, _ := e.MinioClient.ListBuckets()
 	wg := sync.WaitGroup{}
 	wg.Add(len(buckets))
@@ -237,6 +252,7 @@ func collectBucketStats(e *MinioExporter, ch chan<- prometheus.Metric) {
 	wg.Wait()
 }
 
+// calculate bucket statistics
 func bucketStats(bucket minio.BucketInfo, e *MinioExporter, ch chan<- prometheus.Metric) {
 	location, _ := e.MinioClient.GetBucketLocation(bucket.Name)
 	var (
@@ -300,15 +316,17 @@ func bucketStats(bucket minio.BucketInfo, e *MinioExporter, ch chan<- prometheus
 		float64(incompleteUploadSize), bucket.Name, location)
 }
 
-func init() {
-	prometheus.MustRegister(version.NewCollector(program))
-}
-
+// get Enviroment variable value if the variable exists otherwise
+// return the default
 func getEnv(key string, defaultVal string) string {
 	if env, ok := os.LookupEnv(key); ok {
 		return env
 	}
 	return defaultVal
+}
+
+func init() {
+	prometheus.MustRegister(version.NewCollector(program))
 }
 
 func main() {
