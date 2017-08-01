@@ -25,7 +25,7 @@ DOCKER_IMAGE_TAG    ?= $(VERSION)
 
 pkgs := $(shell $(GO) list)
 
-all: format build test docker_push clean
+all: format build test docker_push tarball clean
 
 build: get_dep
 	@echo "... building binaries"
@@ -56,6 +56,11 @@ docker_push: docker_build
 
 clean:
 	@echo "... cleaning up"
-	rm -rf $(TARGET) $(ARCHIVE) .build
+	@rm -rf $(TARGET) $(ARCHIVE) .build
 
-.PHONY: all build format test docker_build
+tarball: $(ARCHIVE)
+$(ARCHIVE): $(TARGET)
+	@echo "... creating tarball"
+	@tar -czf $@ $<
+
+.PHONY: all build format test docker_build docker_push tarball clean

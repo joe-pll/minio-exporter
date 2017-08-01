@@ -73,6 +73,12 @@ func NewMinioExporter(uri string, minioKey string, minioSecret string, bucketSta
 	if err != nil {
 		return nil, fmt.Errorf("invalid Minio URI: %s with error <%s>", newURI, err)
 	}
+	if urlMinio.Scheme != "http" && urlMinio.Scheme != "https" {
+		return nil, fmt.Errorf("invalid scheme for Minio: %s", urlMinio.Scheme)
+	}
+	if urlMinio.Host == "" {
+		return nil, fmt.Errorf("Empty host is a non valid host: %s", urlMinio)
+	}
 
 	if urlMinio.Scheme == "https" {
 		secure = true
