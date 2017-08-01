@@ -20,8 +20,8 @@ OS                  := $(shell uname | tr A-Z a-z)
 ARCH                := $(shell uname -p)
 ARCHIVE             := $(TARGET)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 
-DOCKER_IMAGE_NAME   ?= minio-exporter
-DOCKER_IMAGE_TAG    ?= $(VERSION)
+DOCKER_IMAGE_NAME   ?= joepll/minio-exporter
+DOCKER_IMAGE_TAG    ?= v$(VERSION)
 
 pkgs := $(shell $(GO) list)
 
