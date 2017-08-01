@@ -339,7 +339,7 @@ func main() {
 	var (
 		printVersion  = flag.Bool("version", false, "Print version information.")
 		listenAddress = flag.String("web.listen-address", getEnv("LISTEN_ADDRESS", ":9290"), "Address to listen on for web interface and telemetry.")
-		metricsPath   = flag.String("web.telemetry-path", getEnv("MINIO_METRIC_PATH", "/metrics"), "Path under which to expose metrics.")
+		metricsPath   = flag.String("web.telemetry-path", getEnv("METRIC_PATH", "/metrics"), "Path under which to expose metrics.")
 		minioURI      = flag.String("minio.server", getEnv("MINIO_URL", "http://localhost:9000"), "HTTP address of the Minio server")
 		minioKey      = flag.String("minio.access-key", getEnv("MINIO_ACCESS_KEY", ""), "The access key used to login in to Minio.")
 		minioSecret   = flag.String("minio.access-secret", getEnv("MINIO_ACCESS_SECRET", ""), "The access secret used to login in to Minio")

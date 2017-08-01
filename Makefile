@@ -25,7 +25,7 @@ DOCKER_IMAGE_TAG    ?= $(VERSION)
 
 pkgs := $(shell $(GO) list)
 
-all: format build test docker_push tarball clean
+all: format build test
 
 build: get_dep
 	@echo "... building binaries"
@@ -43,14 +43,14 @@ get_dep:
 	@echo "... getting dependencies"
 	@$(GO) get -d
 
-docker: docker_push
+docker: docker_build docker_push
 	@echo "... docker building and pushing"
 
 docker_build: build
 	@echo "... building docker image"
 	@docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) .
 
-docker_push: docker_build
+docker_push:
 	@echo "... pushing docker image"
 	@docker push $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)
 
