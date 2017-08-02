@@ -29,7 +29,7 @@ all: format build test
 
 build: get_dep
 	@echo "... building binaries"
-	@$(GO) build $(pkgs)
+	@CGO_ENABLED=0 $(GO) build -a -installsuffix cgo $(pkgs)
 
 format:
 	@echo "... formatting packages"
