@@ -135,7 +135,7 @@ func execute(e *MinioExporter, ch chan<- prometheus.Metric) error {
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "uptime"),
-			"Minio server uptime in seconds",
+			"Minio service uptime in seconds",
 			nil,
 			nil),
 		prometheus.CounterValue,
@@ -151,81 +151,108 @@ func execute(e *MinioExporter, ch chan<- prometheus.Metric) error {
 
 func collectServerStats(e *MinioExporter, ch chan<- prometheus.Metric) {
 	statsAll, _ := e.AdminClient.ServerInfo()
+	var storageInfo madmin.StorageInfo
 
 	for _, stats := range statsAll {
+		err := stats.Error
 		host := stats.Addr
-		connStats := stats.Data.ConnStats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "conn", "total_input_bytes"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(connStats.TotalInputBytes), host)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "conn", "total_output_bytes"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(connStats.TotalOutputBytes), host)
+		serverUp := 1
+		if err == "" {
+			storageInfo = stats.Data.StorageInfo
+			connStats := stats.Data.ConnStats
+			properties := stats.Data.Properties
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "uptime"),
+					"Minio server uptime in seconds",
+					[]string{"minio_host"},
+					nil),
+				prometheus.CounterValue,
+				properties.Uptime.Seconds(), host)
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "total_input_bytes"),
+					"Minio total input bytes received by the host",
+					[]string{"minio_host"},
+					nil),
+				prometheus.GaugeValue,
+				float64(connStats.TotalInputBytes), host)
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "total_output_bytes"),
+					"Minio total output bytes sent from the host",
+					[]string{"minio_host"},
+					nil),
+				prometheus.GaugeValue,
+				float64(connStats.TotalOutputBytes), host)
+		} else {
+			serverUp = 0
+		}
 
-		collectStorageInfo(stats.Data.StorageInfo, host, ch)
+		ch <- prometheus.MustNewConstMetric(
+			prometheus.NewDesc(
+				prometheus.BuildFQName(namespace, "server", "up"),
+				"Minio host up",
+				[]string{"minio_host"},
+				nil),
+			prometheus.GaugeValue,
+			float64(serverUp), host)
 	}
 
+	if storageInfo != (madmin.StorageInfo{}) {
+		collectStorageInfo(storageInfo, ch)
+	}
 }
 
-func collectStorageInfo(si madmin.StorageInfo, host string, ch chan<- prometheus.Metric) {
+func collectStorageInfo(si madmin.StorageInfo, ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "total_disk_space"),
 			"Total Minio disk space in bytes",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Total), host)
+		float64(si.Total))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "free_disk_space"),
 			"Free Minio disk space in bytes",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Free), host)
+		float64(si.Free))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "online_disks"),
 			"Total number of Minio online disks",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OnlineDisks), host)
+		float64(si.Backend.OnlineDisks))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "offline_disks"),
 			"Total number of Minio offline disks",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OfflineDisks), host)
+		float64(si.Backend.OfflineDisks))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "read_quorum"),
 			"Minio read quorum",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.ReadQuorum), host)
+		float64(si.Backend.ReadQuorum))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "write_quorum"),
 			"Minio write quorum",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.WriteQuorum), host)
+		float64(si.Backend.WriteQuorum))
 
 	var fstype string
 	switch fstypeN := si.Backend.Type; fstypeN {
