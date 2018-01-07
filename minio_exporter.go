@@ -135,7 +135,7 @@ func execute(e *MinioExporter, ch chan<- prometheus.Metric) error {
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "uptime"),
-			"Minio server uptime in seconds",
+			"Minio service uptime in seconds",
 			nil,
 			nil),
 		prometheus.CounterValue,
@@ -151,272 +151,304 @@ func execute(e *MinioExporter, ch chan<- prometheus.Metric) error {
 
 func collectServerStats(e *MinioExporter, ch chan<- prometheus.Metric) {
 	statsAll, _ := e.AdminClient.ServerInfo()
+	var storageInfo madmin.StorageInfo
 
 	for _, stats := range statsAll {
+		err := stats.Error
 		host := stats.Addr
-		connStats := stats.Data.ConnStats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "conn", "total_input_bytes"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(connStats.TotalInputBytes), host)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "conn", "total_output_bytes"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(connStats.TotalOutputBytes), host)
-		httpStats := stats.Data.HTTPStats
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_count_heads"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.TotalHEADStats.Count), host)
+		serverUp := 1
+		if err == "" {
+			storageInfo = stats.Data.StorageInfo
+			connStats := stats.Data.ConnStats
+			properties := stats.Data.Properties
+			httpStats := stats.Data.HTTPStats
 
-		f, _ := time.ParseDuration(httpStats.TotalHEADStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_avg_duration_heads"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(f.Seconds()), host)
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "uptime"),
+					"Minio server uptime in seconds",
+					[]string{"minio_host"},
+					nil),
+				prometheus.CounterValue,
+				properties.Uptime.Seconds(), host)
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "total_input_bytes"),
+					"Minio total input bytes received by the host",
+					[]string{"minio_host"},
+					nil),
+				prometheus.GaugeValue,
+				float64(connStats.TotalInputBytes), host)
+			ch <- prometheus.MustNewConstMetric(
+				prometheus.NewDesc(
+					prometheus.BuildFQName(namespace, "server", "total_output_bytes"),
+					"Minio total output bytes sent from the host",
+					[]string{"minio_host"},
+					nil),
+				prometheus.GaugeValue,
+				float64(connStats.TotalOutputBytes), host)
 
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_count_heads"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.SuccessHEADStats.Count), host)
-
-	    g, _ := time.ParseDuration(httpStats.SuccessHEADStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_avg_duration_heads"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(g.Seconds()), host)
+			collectHTTPStats(httpStats, host, ch)
+		} else {
+			serverUp = 0
+		}
 
 		ch <- prometheus.MustNewConstMetric(
 			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_count_gets"),
-				"Minio total input bytes received",
+				prometheus.BuildFQName(namespace, "server", "up"),
+				"Minio host up",
 				[]string{"minio_host"},
 				nil),
 			prometheus.GaugeValue,
-			float64(httpStats.TotalGETStats.Count), host)
-
-	    h, _ := time.ParseDuration(httpStats.TotalGETStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_avg_duration_gets"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(h.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_count_gets"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.SuccessGETStats.Count), host)
-
-	    i, _ := time.ParseDuration(httpStats.SuccessGETStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_avg_duration_gets"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(i.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_count_puts"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.TotalPUTStats.Count), host)
-
-	    j, _ := time.ParseDuration(httpStats.TotalPUTStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_avg_duration_puts"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(j.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_count_puts"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.SuccessPUTStats.Count), host)
-
-
-	    k, _ := time.ParseDuration(httpStats.SuccessPUTStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_avg_duration_puts"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(k.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_count_posts"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.TotalPOSTStats.Count), host)
-
-	    l, _ := time.ParseDuration(httpStats.TotalPOSTStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_avg_duration_posts"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(l.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_count_posts"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.SuccessPOSTStats.Count), host)
-
-	    m, _ := time.ParseDuration(httpStats.SuccessPOSTStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_avg_duration_posts"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(m.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_count_deletes"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.TotalDELETEStats.Count), host)
-
-	    n, _ := time.ParseDuration(httpStats.TotalDELETEStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "total_avg_duration_deletes"),
-				"Minio total input bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(n.Seconds()), host)
-
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_count_deletes"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(httpStats.SuccessDELETEStats.Count), host)
-
-	    o, _ := time.ParseDuration(httpStats.SuccessDELETEStats.AvgDuration)
-		ch <- prometheus.MustNewConstMetric(
-			prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, "http", "success_avg_duration_deletes"),
-				"Minio total output bytes received",
-				[]string{"minio_host"},
-				nil),
-			prometheus.GaugeValue,
-			float64(o.Seconds()), host)
-
-		collectStorageInfo(stats.Data.StorageInfo, host, ch)
+			float64(serverUp), host)
 	}
 
+	if storageInfo != (madmin.StorageInfo{}) {
+		collectStorageInfo(storageInfo, ch)
+	}
 }
 
-func collectStorageInfo(si madmin.StorageInfo, host string, ch chan<- prometheus.Metric) {
+func collectHTTPStats(httpStats madmin.ServerHTTPStats, host string, ch chan<- prometheus.Metric) {
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_count_heads"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.TotalHEADStats.Count), host)
+
+	totHEADStats, _ := time.ParseDuration(httpStats.TotalHEADStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_avg_duration_heads"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(totHEADStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_count_heads"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.SuccessHEADStats.Count), host)
+
+	succHEADStats, _ := time.ParseDuration(httpStats.SuccessHEADStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_avg_duration_heads"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(succHEADStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_count_gets"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.TotalGETStats.Count), host)
+
+	totGETStats, _ := time.ParseDuration(httpStats.TotalGETStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_avg_duration_gets"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(totGETStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_count_gets"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.SuccessGETStats.Count), host)
+
+	succGETStats, _ := time.ParseDuration(httpStats.SuccessGETStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_avg_duration_gets"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(succGETStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_count_puts"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.TotalPUTStats.Count), host)
+
+	totPUTStats, _ := time.ParseDuration(httpStats.TotalPUTStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_avg_duration_puts"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(totPUTStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_count_puts"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.SuccessPUTStats.Count), host)
+
+	succPUTStats, _ := time.ParseDuration(httpStats.SuccessPUTStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_avg_duration_puts"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(succPUTStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_count_posts"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.TotalPOSTStats.Count), host)
+
+	totPOSTStats, _ := time.ParseDuration(httpStats.TotalPOSTStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_avg_duration_posts"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(totPOSTStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_count_posts"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.SuccessPOSTStats.Count), host)
+
+	succPOSTStats, _ := time.ParseDuration(httpStats.SuccessPOSTStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_avg_duration_posts"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(succPOSTStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_count_deletes"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.TotalDELETEStats.Count), host)
+
+	totDELETEStats, _ := time.ParseDuration(httpStats.TotalDELETEStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "total_avg_duration_deletes"),
+			"Minio total input bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(totDELETEStats.Seconds()), host)
+
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_count_deletes"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(httpStats.SuccessDELETEStats.Count), host)
+
+	succDELETEStats, _ := time.ParseDuration(httpStats.SuccessDELETEStats.AvgDuration)
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "http", "success_avg_duration_deletes"),
+			"Minio total output bytes received",
+			[]string{"minio_host"},
+			nil),
+		prometheus.GaugeValue,
+		float64(succDELETEStats.Seconds()), host)
+}
+
+func collectStorageInfo(si madmin.StorageInfo, ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "total_disk_space"),
 			"Total Minio disk space in bytes",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Total), host)
+		float64(si.Total))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "free_disk_space"),
 			"Free Minio disk space in bytes",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Free), host)
+		float64(si.Free))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "online_disks"),
 			"Total number of Minio online disks",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OnlineDisks), host)
+		float64(si.Backend.OnlineDisks))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "offline_disks"),
 			"Total number of Minio offline disks",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.OfflineDisks), host)
+		float64(si.Backend.OfflineDisks))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "read_quorum"),
 			"Minio read quorum",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.ReadQuorum), host)
+		float64(si.Backend.ReadQuorum))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "storage", "write_quorum"),
 			"Minio write quorum",
-			[]string{"minio_host"},
+			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.WriteQuorum), host)
+		float64(si.Backend.WriteQuorum))
 
 	var fstype string
 	switch fstypeN := si.Backend.Type; fstypeN {
