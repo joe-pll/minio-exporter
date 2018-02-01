@@ -435,20 +435,20 @@ func collectStorageInfo(si madmin.StorageInfo, ch chan<- prometheus.Metric) {
 		float64(si.Backend.OfflineDisks))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "storage", "read_quorum"),
-			"Minio read quorum",
+			prometheus.BuildFQName(namespace, "storage", "standard_sc_parity"),
+			"Minio parity disks for currently configured Standard storage class",
 			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.ReadQuorum))
+		float64(si.Backend.StandardSCParity))
 	ch <- prometheus.MustNewConstMetric(
 		prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "storage", "write_quorum"),
-			"Minio write quorum",
+			prometheus.BuildFQName(namespace, "storage", "rrsc_parity"),
+			"Minio parity disks for currently configured Reduced Redundancy storage class",
 			nil,
 			nil),
 		prometheus.GaugeValue,
-		float64(si.Backend.WriteQuorum))
+		float64(si.Backend.RRSCParity))
 
 	var fstype string
 	switch fstypeN := si.Backend.Type; fstypeN {
