@@ -3,6 +3,12 @@ MINIO EXPORTER
 
 A Prometheus exporter for Minio cloud storage server
 
+## Compatibility
+| minio-exporter version | Minio version                   |
+| ---------------------- | ------------------------------- |
+| v0.1.0                 | <= RELEASE.2018-01-02T23-07-00Z |
+| v0.2.0                 | == RELEASE.2018-01-18T20-33-21Z |
+
 Build and launch the exporter as following.  
 ```bash
 make
